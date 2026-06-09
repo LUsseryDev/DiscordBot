@@ -1,22 +1,22 @@
-import asyncio
-
+import util
+import time
+from collections import deque
 import discord
 from discord.ext import commands
-
 import yt_dlp
 
 ytdlpFormat = {
     'format': 'bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
     'restrictfilenames': True,
-    'noplaylist': True,
     'nocheckcertificate': True,
     'ignoreerrors': False,
     'logtostderr': False,
-    'quiet': False,
+    'quiet': True,
     'no_warnings': False,
     'default_search': 'auto',
     'source_address': '0.0.0.0',
+    'extractor_args': {'generic': {'impersonate': ['Chrome-149']}}
 }
 
 ytdlp = yt_dlp.YoutubeDL(ytdlpFormat)
@@ -25,45 +25,156 @@ ytdlp = yt_dlp.YoutubeDL(ytdlpFormat)
 class MusicCMDs(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.queues = {}
+        self.nowPlaying = {}
+
 
     @commands.command()
     async def play(self, ctx, url:str):
+        """Plays music (or any other YouTube video) in a voice channel
 
+        Parameters
+        ----------
+        url: str
+            The url of the video you want to play"""
+
+        #make sure author is in voice
+        if not ctx.author.voice:
+            await ctx.send("You aren't in a voice channel")
+            return
+
+        #ensure bot is in voice
         channel = ctx.author.voice.channel
-
         if ctx.voice_client is not None:
             await ctx.voice_client.move_to(channel)
         else:
             await channel.connect()
 
-        async with ctx.typing():
+        # function for playing next in queue
+        def playNext():
+            #reset if queue is empty
+            if ctx.guild.id not in self.queues or not self.queues[ctx.guild.id]:
+                del self.nowPlaying[ctx.guild.id]
+                self.queues.pop(ctx.guild.id, None)
+                return
 
-            data = await self.bot.loop.run_in_executor(None, lambda: ytdlp.extract_info(url, download=False))
-            player = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(data['url']))
-            #ctx.voice_client.play(player)
-            ctx.voice_client.play(player, after=lambda e: print(f'PLayer error {e}') if e else None)
-        await ctx.send(f'Now playing: {data['title']}')
+            #otherwise play next song
+            self.nowPlaying[ctx.guild.id] = self.queues[ctx.guild.id].popleft()
+            player = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(self.nowPlaying[ctx.guild.id]['url']))
+            self.nowPlaying[ctx.guild.id]['startTime'] = time.time()
+            ctx.voice_client.play(player, after=lambda e: print(f'PLayer error {e}') if e else playNext())
+
+        #if already playing, add to queue, otherwise play now
+        if ctx.voice_client.is_playing():
+            async with ctx.typing():
+                if ctx.guild.id not in self.queues:
+                    self.queues[ctx.guild.id] = deque()
+                d = await self.bot.loop.run_in_executor(None, lambda: ytdlp.extract_info(url, download=False))
+                self.queues[ctx.guild.id].append(d)
+            await ctx.send(f'Added {d['title']} to the queue')
+        else:
+            async with ctx.typing():
+
+                data = await self.bot.loop.run_in_executor(None, lambda: ytdlp.extract_info(url, download=False))
+                self.nowPlaying[ctx.guild.id] = data
+                player = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(data['url']))
+                data['startTime'] = time.time()
+                ctx.voice_client.play(player, after=lambda e: print(f'PLayer error {e}') if e else playNext())
+            await ctx.send(f'Now playing: {data['title']}')
 
     @play.error
     async def playError(self, ctx, error):
         if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send("Missing url")
-
-    # @commands.command()
-    # async def local(self, ctx):
-    #     channel = ctx.author.voice.channel
-    #
-    #     if ctx.voice_client is not None:
-    #         await ctx.voice_client.move_to(channel)
-    #     else:
-    #         await channel.connect()
-    #
-    #     player = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio('youtube-LhKJ4lLHBeI-The_Archives.webm'))
-    #     player = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio('https://rr5---sn-5uaeznlz.googlevideo.com/videoplayback?expire=1780491244&ei=jM8favqJMqmylu8PoYbayAg&ip=172.2.16.242&id=o-AKwuqNg0UEQqG9ADFaakSN0hymEE1gRxOCamv1zkvM2o&itag=251&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=314&met=1780469644%2C&mh=28&mm=31%2C29&mn=sn-5uaeznlz%2Csn-5ualdnzs&ms=au%2Crdu&mv=m&mvi=5&pl=20&rms=au%2Cau&gcr=us&initcwndbps=2555000&bui=AbKmrwqE03JY7uNARIX11bntR_YH-1AU9Il2qSPMJ35ZD21etnbIcGZy33bwzB3fF9Aw48RPhJVirVdy&spc=96Xrv-Ap3J4Xa7jtsLvY8pHY1ZRx4Ek6hcutJX_aJiiB&vprv=1&svpuc=1&mime=audio%2Fwebm&rqh=1&gir=yes&clen=2069477&dur=111.501&lmt=1714597324687993&mt=1780469136&fvip=5&keepalive=yes&fexp=51565115%2C51565681&c=ANDROID_VR&txp=2318224&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cgcr%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AHEqNM4wRQIgdgZdoP2xxJqaR_q7boS_SHNqvWc2NISIiURqaG8k98QCIQCVG6xw96Z830nJpHJeYHoQ1BGMABa7IeTbXqBFHxD_bA%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRgIhAIBII4eRafx5lDoNd0MLp9K0e0_hXV0sB-C3StbWFcZsAiEA75Rb1Tkt2waxUS_fm7xk_5MuekxoFglfXl_dNPbWaIA%3D'))
-    #     ctx.voice_client.play(player)
-
-
+            await ctx.send("Missing url to play")
 
     @commands.command()
     async def stop(self, ctx):
+        """Stops playback and makes the bot leave the voice channel"""
+        # make sure author is in voice
+        if not ctx.author.voice:
+            await ctx.send("You aren't in a voice channel")
+            return
+
+        # make sure bot is in voice
+        if ctx.voice_client is None:
+            await ctx.send(f"{self.bot.user.name} isn't in a voice channel")
+            return
+
+
         await ctx.voice_client.disconnect()
+        del self.nowPlaying[ctx.guild.id]
+        del self.queues[ctx.guild.id]
+
+    @commands.command()
+    async def skip(self, ctx):
+        """Skips the current song"""
+        # make sure author is in voice
+        if not ctx.author.voice:
+            await ctx.send("You aren't in a voice channel")
+            return
+
+        # make sure bot is in voice
+        if ctx.voice_client is None:
+            await ctx.send(f"{self.bot.user.name} isn't in a voice channel")
+            return
+
+        ctx.voice_client.stop()
+
+    @commands.command()
+    async def queue(self, ctx):
+        """Shows the song currently playing and any songs in queue"""
+        # make sure bot is in voice
+        if ctx.voice_client is None:
+            await ctx.send(f"{self.bot.user.name} isn't in a voice channel")
+            return
+
+        if ctx.guild.id not in self.nowPlaying:
+            await ctx.send("Nothing playing")
+
+        currentTime = round(time.time() - self.nowPlaying[ctx.guild.id]['startTime'])
+        await ctx.send(f'Now Playing: [{self.nowPlaying[ctx.guild.id]['title']}](<{self.nowPlaying[ctx.guild.id]['original_url']}>)\n'
+                       f'[{util.formatTime(currentTime)}/{util.formatTime(self.nowPlaying[ctx.guild.id]['duration'])}]{util.progressBar(currentTime/self.nowPlaying[ctx.guild.id]['duration'], 27)}')
+
+        #make queue show as well as now playing
+        if ctx.guild.id not in self.queues:
+            return
+        qstr = ""
+        for i, s in enumerate(self.queues[ctx.guild.id]):
+            qstr += f'{i}. [{s['title']}](<{s['original_url']}>)\n'
+
+        await ctx.send(qstr)
+
+    @commands.command()
+    async def remove(self, ctx, idx):
+        """Remove a song from queue
+
+                Parameters
+                ----------
+                idx: int
+                    The position in queue of the song you want to remove"""
+        # make sure author is in voice
+        if not ctx.author.voice:
+            await ctx.send("You aren't in a voice channel")
+            return
+
+        # make sure bot is in voice
+        if ctx.voice_client is None:
+            await ctx.send(f"{self.bot.user.name} isn't in a voice channel")
+            return
+
+        try:
+            idx = int(idx)-1
+        except ValueError:
+            await ctx.send("Invalid index")
+            return
+
+        if 0 > idx or idx > len(self.queues[ctx.guild.id]):
+            await ctx.send(f"There is no song at position {idx} in the queue")
+        s = self.queues[ctx.guild.id][idx]
+        del self.queues[ctx.guild.id][idx]
+        await ctx.send(f"Removed [{s['title']}](<{s['original_url']}>) from the queue")
+
+    @remove.error
+    async def removeError(self, ctx, error):
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send("Missing position in queue to remove")
