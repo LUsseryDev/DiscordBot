@@ -15,4 +15,5 @@ then rerun the bot.
 
 
 ### Docker
-To run the bot in a docker container, the included Dockerfile can be used to create the image
+To run the bot in a docker container, the included Dockerfile can be used to create the image.  Ensure the `Config.ini`
+file is generated and setup before building the docker image.
