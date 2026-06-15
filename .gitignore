@@ -1,6 +1,6 @@
-deno.exe
+src/deno.exe
 .venv
-Config.ini
-ffmpeg.exe
-ffplay.exe
-ffprobe.exe
+src/Config.ini
+src/ffmpeg.exe
+src/ffplay.exe
+src/ffprobe.exe

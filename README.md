@@ -12,3 +12,7 @@ The bot can be started by running the `main.py` file.
 
 The bot will generate an empty config file the first time it's run, place your bot account's login token in the config file,
 then rerun the bot.
+
+
+### Docker
+To run the bot in a docker container, the included Dockerfile can be used to create the image

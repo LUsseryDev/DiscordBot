@@ -133,7 +133,7 @@ class MusicCMDs(commands.Cog):
 
         currentTime = round(time.time() - self.nowPlaying[ctx.guild.id]['startTime'])
         await ctx.send(f'Now Playing: [{self.nowPlaying[ctx.guild.id]['title']}](<{self.nowPlaying[ctx.guild.id]['original_url']}>)\n'
-                       f'[{util.formatTime(currentTime)}/{util.formatTime(self.nowPlaying[ctx.guild.id]['duration'])}]{util.progressBar(currentTime/self.nowPlaying[ctx.guild.id]['duration'], 27)}')
+                       f'[{util.formatTime(currentTime)}/{util.formatTime(self.nowPlaying[ctx.guild.id]['duration'])}]{util.progressBar(currentTime / self.nowPlaying[ctx.guild.id]['duration'], 27)}')
 
         #make queue show as well as now playing
         if ctx.guild.id not in self.queues:

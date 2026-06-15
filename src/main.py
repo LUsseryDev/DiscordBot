@@ -1,9 +1,8 @@
 import asyncio
 import discord
 from discord.ext import commands
-import ConfigUtil
+import ConfigUtil, GeneralCommands
 import MusicCommands
-import GeneralCommands
 import logging
 
 async def main():
